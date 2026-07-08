@@ -1,0 +1,283 @@
+/* SaveMyAI in-page UI. Palette built around #762e20 with an iOS-like,
+   light, glassy aesthetic: generous radii, hairline borders, soft shadows. */
+
+#smai-fab,
+#smai-panel {
+  --smai-primary: #762e20;
+  --smai-primary-strong: #8f3626;
+  --smai-primary-soft: #f4ebe9;
+  --smai-text: #241713;
+  --smai-muted: #9a8681;
+  --smai-border: rgba(118, 46, 32, 0.12);
+  --smai-shadow: 0 20px 50px rgba(59, 20, 12, 0.2);
+  --smai-font: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+    "Microsoft YaHei", sans-serif;
+}
+
+#smai-fab {
+  position: fixed;
+  right: 22px;
+  bottom: 22px;
+  z-index: 2147483646;
+  padding: 11px 20px;
+  font-family: var(--smai-font);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  color: #fff;
+  background: linear-gradient(135deg, var(--smai-primary), var(--smai-primary-strong));
+  border: none;
+  border-radius: 999px;
+  box-shadow: 0 10px 28px rgba(118, 46, 32, 0.38);
+  cursor: pointer;
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+#smai-fab:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 14px 34px rgba(118, 46, 32, 0.46);
+}
+#smai-fab:active {
+  transform: translateY(0);
+}
+
+#smai-panel {
+  position: fixed;
+  right: 22px;
+  bottom: 80px;
+  z-index: 2147483647;
+  width: 366px;
+  max-height: 74vh;
+  display: flex;
+  flex-direction: column;
+  background: rgba(252, 250, 249, 0.86);
+  -webkit-backdrop-filter: saturate(180%) blur(24px);
+  backdrop-filter: saturate(180%) blur(24px);
+  border: 1px solid var(--smai-border);
+  border-radius: 20px;
+  box-shadow: var(--smai-shadow);
+  overflow: hidden;
+  font-family: var(--smai-font);
+  color: var(--smai-text);
+}
+
+#smai-panel .smai-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 15px 18px 13px;
+  border-bottom: 1px solid var(--smai-border);
+}
+#smai-panel .smai-title {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  color: var(--smai-primary);
+}
+#smai-panel .smai-close {
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(118, 46, 32, 0.06);
+  border: none;
+  border-radius: 50%;
+  color: var(--smai-muted);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+#smai-panel .smai-close:hover {
+  background: rgba(118, 46, 32, 0.12);
+}
+
+#smai-panel .smai-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 18px;
+}
+#smai-panel .smai-selall {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  color: var(--smai-text);
+  cursor: pointer;
+}
+
+#smai-panel .smai-list {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  max-height: 34vh;
+  padding: 2px 10px 8px;
+}
+#smai-panel .smai-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border-radius: 12px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: background 0.14s ease;
+}
+#smai-panel .smai-row:hover {
+  background: rgba(118, 46, 32, 0.05);
+}
+#smai-panel .smai-row-name {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#smai-panel .smai-badge {
+  flex-shrink: 0;
+  font-size: 11px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.05);
+  color: var(--smai-muted);
+}
+#smai-panel .smai-badge-bot {
+  background: var(--smai-primary-soft);
+  color: var(--smai-primary);
+}
+#smai-panel .smai-empty {
+  padding: 22px 14px;
+  font-size: 13px;
+  color: var(--smai-muted);
+  line-height: 1.7;
+  text-align: center;
+}
+
+#smai-panel .smai-log-title {
+  padding: 10px 18px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  color: var(--smai-muted);
+  text-transform: uppercase;
+}
+#smai-panel .smai-log {
+  height: 118px;
+  overflow-y: auto;
+  margin: 0 18px 10px;
+  padding: 10px 12px;
+  background: rgba(43, 29, 24, 0.96);
+  color: #f0e3de;
+  border-radius: 14px;
+  font-size: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  line-height: 1.55;
+}
+#smai-panel .smai-log-line {
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+#smai-panel .smai-footer {
+  padding: 12px 18px 18px;
+  border-top: 1px solid var(--smai-border);
+}
+
+/* iOS-style switch, built from the option checkboxes. */
+#smai-panel .smai-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12.5px;
+  color: var(--smai-text);
+  margin-bottom: 11px;
+  cursor: pointer;
+}
+#smai-panel .smai-toggle span {
+  order: 1;
+  flex: 1 1 auto;
+  line-height: 1.4;
+}
+#smai-panel .smai-toggle input[type="checkbox"] {
+  order: 2;
+  -webkit-appearance: none;
+  appearance: none;
+  flex: 0 0 auto;
+  position: relative;
+  width: 40px;
+  height: 24px;
+  border-radius: 999px;
+  background: #e3d9d6;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+#smai-panel .smai-toggle input[type="checkbox"]::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+  transition: transform 0.2s ease;
+}
+#smai-panel .smai-toggle input[type="checkbox"]:checked {
+  background: var(--smai-primary);
+}
+#smai-panel .smai-toggle input[type="checkbox"]:checked::after {
+  transform: translateX(16px);
+}
+#smai-panel .smai-toggle-disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+#smai-panel .smai-toggle-disabled input[type="checkbox"] {
+  cursor: default;
+}
+
+/* Multi-select checkboxes in the list use the accent colour. */
+#smai-panel .smai-row input[type="checkbox"],
+#smai-panel .smai-selall input[type="checkbox"] {
+  width: 17px;
+  height: 17px;
+  accent-color: var(--smai-primary);
+  cursor: pointer;
+}
+
+#smai-panel .smai-btn {
+  font-family: inherit;
+  cursor: pointer;
+  border-radius: 12px;
+  font-size: 13px;
+  transition: filter 0.15s ease, background 0.15s ease;
+}
+#smai-panel .smai-btn-primary {
+  width: 100%;
+  padding: 12px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  color: #fff;
+  border: none;
+  background: linear-gradient(135deg, var(--smai-primary), var(--smai-primary-strong));
+  box-shadow: 0 8px 20px rgba(118, 46, 32, 0.28);
+}
+#smai-panel .smai-btn-primary:hover {
+  filter: brightness(1.05);
+}
+#smai-panel .smai-btn-primary:disabled {
+  opacity: 0.5;
+  box-shadow: none;
+  cursor: default;
+}
+#smai-panel .smai-btn-ghost {
+  padding: 6px 12px;
+  color: var(--smai-primary);
+  background: var(--smai-primary-soft);
+  border: none;
+}
+#smai-panel .smai-btn-ghost:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

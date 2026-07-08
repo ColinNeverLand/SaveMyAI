@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SaveMyAI 设置</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <header class="smai-pop-header">
+      <h1>SaveMyAI</h1>
+      <p>导出豆包智能体，并迁移到 SillyTavern。</p>
+    </header>
+
+    <main class="smai-pop-main">
+      <section class="smai-pop-card">
+        <h2>使用步骤</h2>
+        <ol>
+          <li>打开并登录 <b>doubao.com</b>。</li>
+          <li>点击页面右下角的 <b>SaveMyAI</b> 按钮。</li>
+          <li>勾选要备份的对话，点击导出。</li>
+        </ol>
+      </section>
+
+      <section class="smai-pop-card">
+        <h2>模型设置（可选）</h2>
+        <p class="smai-pop-hint">
+          仅在需要生成「核心记忆世界书」时填写。填写任意 OpenAI 兼容接口即可，<b>国内中转站</b>把它给你的接口地址粘到下方即可使用。
+        </p>
+
+        <label class="smai-pop-field">
+          <span>接口地址（Base URL）</span>
+          <input id="baseUrl" type="text" placeholder="https://your-relay.com/v1" autocomplete="off" />
+        </label>
+
+        <label class="smai-pop-field">
+          <span>API Key</span>
+          <input id="apiKey" type="password" placeholder="sk-..." autocomplete="off" />
+        </label>
+
+        <label class="smai-pop-field">
+          <span>模型名</span>
+          <input id="model" type="text" placeholder="gpt-4o-mini" autocomplete="off" />
+        </label>
+
+        <div class="smai-pop-actions">
+          <button id="save" class="smai-pop-btn">保存</button>
+          <button id="test" class="smai-pop-btn smai-pop-btn-ghost">测试连接</button>
+          <button id="clear" class="smai-pop-btn smai-pop-btn-ghost">清除</button>
+        </div>
+        <p id="status" class="smai-pop-status" role="status"></p>
+      </section>
+
+      <p class="smai-pop-privacy">
+        Key 只保存在本机浏览器中，仅在你生成世界书时直接发送给你所填的接口。
+      </p>
+    </main>
+
+    <script src="popup.js"></script>
+  </body>
+</html>

@@ -1,0 +1,163 @@
+/* SaveMyAI settings popup. Same #762e20-based iOS-like palette as the
+   in-page panel: light surfaces, hairline borders, soft rounded cards. */
+
+:root {
+  --smai-primary: #762e20;
+  --smai-primary-strong: #8f3626;
+  --smai-primary-soft: #f4ebe9;
+  --smai-text: #241713;
+  --smai-muted: #9a8681;
+  --smai-bg: #faf7f6;
+  --smai-card: #ffffff;
+  --smai-border: rgba(118, 46, 32, 0.12);
+  --smai-font: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+    "Microsoft YaHei", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  width: 340px;
+  margin: 0;
+  font-family: var(--smai-font);
+  color: var(--smai-text);
+  background: var(--smai-bg);
+}
+
+.smai-pop-header {
+  padding: 20px 20px 18px;
+  color: #fff;
+  background: linear-gradient(135deg, var(--smai-primary), var(--smai-primary-strong));
+}
+.smai-pop-header h1 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+}
+.smai-pop-header p {
+  margin: 6px 0 0;
+  font-size: 12.5px;
+  opacity: 0.85;
+  line-height: 1.5;
+}
+
+.smai-pop-main {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.smai-pop-card {
+  background: var(--smai-card);
+  border: 1px solid var(--smai-border);
+  border-radius: 16px;
+  padding: 16px;
+  box-shadow: 0 6px 18px rgba(59, 20, 12, 0.06);
+}
+.smai-pop-card h2 {
+  margin: 0 0 10px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--smai-primary);
+}
+.smai-pop-card ol {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13px;
+  line-height: 1.8;
+  color: var(--smai-text);
+}
+.smai-pop-card b {
+  color: var(--smai-primary);
+}
+
+.smai-pop-hint {
+  margin: 0 0 12px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--smai-muted);
+}
+
+.smai-pop-field {
+  display: block;
+  margin-bottom: 12px;
+}
+.smai-pop-field span {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--smai-text);
+}
+.smai-pop-field input {
+  width: 100%;
+  padding: 10px 12px;
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--smai-text);
+  background: #fbf8f7;
+  border: 1px solid var(--smai-border);
+  border-radius: 12px;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.smai-pop-field input:focus {
+  border-color: var(--smai-primary);
+  box-shadow: 0 0 0 3px rgba(118, 46, 32, 0.12);
+}
+
+.smai-pop-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 4px;
+}
+.smai-pop-btn {
+  flex: 1 1 auto;
+  padding: 10px 12px;
+  font-size: 13px;
+  font-weight: 700;
+  font-family: inherit;
+  color: #fff;
+  background: linear-gradient(135deg, var(--smai-primary), var(--smai-primary-strong));
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  box-shadow: 0 6px 16px rgba(118, 46, 32, 0.26);
+  transition: filter 0.15s ease;
+}
+.smai-pop-btn:hover {
+  filter: brightness(1.05);
+}
+.smai-pop-btn-ghost {
+  flex: 0 0 auto;
+  color: var(--smai-primary);
+  background: var(--smai-primary-soft);
+  box-shadow: none;
+}
+
+.smai-pop-status {
+  margin: 10px 0 0;
+  min-height: 16px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--smai-muted);
+}
+.smai-pop-status[data-kind="ok"] {
+  color: #2f855a;
+}
+.smai-pop-status[data-kind="error"] {
+  color: #c0392b;
+}
+
+.smai-pop-privacy {
+  margin: 0;
+  padding: 0 4px;
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--smai-muted);
+  text-align: center;
+}

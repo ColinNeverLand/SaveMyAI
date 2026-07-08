@@ -1,0 +1,13 @@
+# Dependencies
+node_modules/
+
+# Build / conversion output
+tavern-output/
+*.zip
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.log
+.idea/
+.vscode/

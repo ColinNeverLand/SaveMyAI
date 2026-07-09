@@ -31,6 +31,7 @@
 
     const notes = ["由 SaveMyAI 从豆包智能体迁移。"];
     if (p.description_for_human) notes.push("简介：" + p.description_for_human);
+    if (p.original_setting) notes.push("作者原始设定：" + p.original_setting);
     if (p.model) notes.push("原模型：" + p.model);
     if (p.voice) notes.push("原音色：" + p.voice);
     if (p.creator) notes.push("原创建者：" + p.creator);

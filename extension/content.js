@@ -548,11 +548,10 @@
     "  chat.md       可直接阅读的聊天记录（含人设、重新生成的分支、图片）\n" +
     "  raw.json      豆包接口原始数据（最完整的兜底备份，请务必保留）\n" +
     "  images/       聊天里的图片（如果导出时勾选了「包含图片」）\n\n" +
-    "若勾选了「生成酒馆可导入文件」，压缩包中还会有 SillyTavern/ 文件夹：\n" +
-    "  每个智能体一个子文件夹，内含：\n" +
-    "    <角色名>.png / .card.json  酒馆角色卡（推荐直接导入 .png）\n" +
-    "    world_book.json            核心记忆世界书（如果生成了）\n" +
-    "    chats/*.jsonl              聊天记录（重新生成的分支已映射为 swipes）\n\n" +
+    "若勾选了酒馆相关选项，压缩包中还会有 SillyTavern/ 文件夹，每个角色一个子文件夹：\n" +
+    "    chats/*.jsonl              酒馆格式聊天记录（重新生成的分支已映射为 swipes）\n" +
+    "    <角色名>.png / .card.json  角色卡（基于聊天记录提取，推荐直接导入 .png）\n" +
+    "    world_book.json            核心记忆世界书（随角色卡一起提取）\n\n" +
     "archive.json 中，被重新生成过的 AI 回复，text 字段是你当时选中显示的那一条，\n" +
     "其余未选中的分支保存在 alternates 里，不会丢失。\n\n" +
     "所有数据仅保存在你自己的电脑上，SaveMyAI 不会上传任何内容。\n";
@@ -593,10 +592,15 @@
   // --- SillyTavern generation ------------------------------------------------
 
   // Produces SillyTavern files for a group of conversations belonging to one bot.
+  // Two independent deliverables share the same folder and character name:
+  //   - chat records (JSONL)          when options.tavernChat
+  //   - character card + world book   when options.reconstruct
   async function generateTavernFiles(group, files, options, log) {
     const convert = window.__SaveMyAIConvert;
     const worldInfo = window.__SaveMyAIWorldInfo;
-    const modelReady = Boolean(options.worldInfo && options.settings && worldInfo);
+    const canUseModel = Boolean(
+      options.reconstruct && options.settings && !options.modelUnavailable && worldInfo
+    );
 
     let messageCount = 0;
     group.archives.forEach((archive) => (messageCount += (archive.messages || []).length));
@@ -607,71 +611,81 @@
       messages: archive.messages || [],
     }));
 
-    // Synthesise a persona for conversations that have none (e.g. the default
-    // assistant), so the resulting card is not an empty shell.
+    // Reconstruct the character from the chat history: one shared pipeline yields
+    // both the persona (for the card) and the world book, so they stay
+    // consistent. The author's original core setting is preserved in the card
+    // notes, never discarded.
     let persona = group.persona;
-    if (!persona && modelReady) {
-      log("    正在为普通对话合成人设…");
-      const synthesized = await worldInfo.synthesizePersona(conversations, options.settings, log);
-      if (synthesized) {
+    let facts = [];
+    if (canUseModel) {
+      log(persona ? "    正在基于聊天记录提取角色卡与世界书…" : "    正在为普通对话提取角色卡与世界书…");
+      const result = await worldInfo.reconstructCharacter(conversations, options.settings, log, persona);
+      facts = result.facts || [];
+      if (result.persona) {
+        const original = persona || {};
+        const originalSetting = (original.description_for_model || "").trim();
+        const greetings = Array.isArray(original.onboarding) ? original.onboarding.filter(Boolean) : [];
+        if (result.persona.first_mes && !greetings.includes(result.persona.first_mes)) {
+          greetings.push(result.persona.first_mes);
+        }
         persona = {
-          name: synthesized.name,
-          description_for_model: synthesized.description,
-          onboarding: synthesized.first_mes ? [synthesized.first_mes] : [],
+          ...original,
+          name: original.name || result.persona.name,
+          description_for_model: result.persona.description || originalSetting,
+          onboarding: greetings.length ? greetings : result.persona.first_mes ? [result.persona.first_mes] : [],
+          original_setting:
+            originalSetting && originalSetting !== result.persona.description ? originalSetting : "",
         };
-        log("    人设合成完成：" + (synthesized.name || "（未命名）"));
+        log("    人设已生成：" + (persona.name || "（未命名）"));
       }
     }
 
     const characterName = sanitize(
       (persona && persona.name) || group.name || (group.botId ? "智能体_" + shortId(group.botId) : "豆包伙伴")
     );
-
-    let characterBook = null;
-    if (modelReady) {
-      try {
-        const facts = await worldInfo.distillFacts(conversations, options.settings, log);
-        log("    世界书：得到 " + facts.length + " 条长期记忆。");
-        if (facts.length) {
-          characterBook = worldInfo.factsToCharacterBook(facts, characterName + " · 迁移记忆");
-        }
-      } catch (error) {
-        log("    世界书蒸馏失败：" + (error.message || error));
-      }
-    }
-
-    const card = convert.buildCardV2(
-      persona,
-      {
-        fallbackName: characterName,
-        botId: group.botId,
-        exportedAt: group.archives[0] && group.archives[0].exported_at,
-        messageCount,
-      },
-      characterBook
-    );
-
     const base = "SillyTavern/" + characterName + "/";
-    const cardJson = JSON.stringify(card, null, 2);
-    files.push({ name: base + characterName + ".card.json", data: cardJson });
-    if (characterBook) {
-      files.push({ name: base + "world_book.json", data: JSON.stringify(characterBook, null, 2) });
-    }
-    try {
-      const png = await convert.buildCardPng(JSON.stringify(card), characterName);
-      files.push({ name: base + characterName + ".png", data: png });
-    } catch (error) {
-      log("  （该角色 PNG 生成失败，仍有 .card.json 可用：" + (error.message || error) + "）");
+
+    // Character card + world book (only when extraction was requested).
+    if (options.reconstruct) {
+      let characterBook = null;
+      if (facts.length) {
+        characterBook = worldInfo.factsToCharacterBook(facts, characterName + " · 迁移记忆");
+        log("    世界书：得到 " + facts.length + " 条长期记忆。");
+      }
+
+      const card = convert.buildCardV2(
+        persona,
+        {
+          fallbackName: characterName,
+          botId: group.botId,
+          exportedAt: group.archives[0] && group.archives[0].exported_at,
+          messageCount,
+        },
+        characterBook
+      );
+      files.push({ name: base + characterName + ".card.json", data: JSON.stringify(card, null, 2) });
+      if (characterBook) {
+        files.push({ name: base + "world_book.json", data: JSON.stringify(characterBook, null, 2) });
+      }
+      try {
+        const png = await convert.buildCardPng(JSON.stringify(card), characterName);
+        files.push({ name: base + characterName + ".png", data: png });
+      } catch (error) {
+        log("  （该角色 PNG 生成失败，仍有 .card.json 可用：" + (error.message || error) + "）");
+      }
+      log("  ✔ 角色卡：" + characterName + (characterBook ? "（含世界书）" : ""));
     }
 
-    group.archives.forEach((archive) => {
-      const jsonl = convert.buildChatJsonl(archive, card.data.name);
-      const fileName =
-        sanitize(archive.conversation.name || "对话") + "_" + shortId(archive.conversation.id) + ".jsonl";
-      files.push({ name: base + "chats/" + fileName, data: jsonl });
-    });
-
-    log("  ✔ 酒馆角色：" + characterName + "（" + group.archives.length + " 段对话）");
+    // Tavern-format chat records (only when requested).
+    if (options.tavernChat) {
+      group.archives.forEach((archive) => {
+        const jsonl = convert.buildChatJsonl(archive, characterName);
+        const fileName =
+          sanitize(archive.conversation.name || "对话") + "_" + shortId(archive.conversation.id) + ".jsonl";
+        files.push({ name: base + "chats/" + fileName, data: jsonl });
+      });
+      log("  ✔ 聊天记录：" + characterName + "（" + group.archives.length + " 段）");
+    }
   }
 
   // --- Export orchestration --------------------------------------------------
@@ -692,7 +706,7 @@
         if (settings.includeImages !== false) {
           await downloadImages(archive, folder, files, log);
         }
-        if (settings.tavern) {
+        if (settings.tavernChat || settings.reconstruct) {
           // Bots are grouped per bot; non-bot conversations (e.g. chats with the
           // default assistant) are merged into a single character.
           const key = item.botId ? "b" + item.botId : "normal";
@@ -735,22 +749,23 @@
       }
     }
 
-    if (settings.tavern && groups.size && window.__SaveMyAIConvert) {
+    if ((settings.tavernChat || settings.reconstruct) && groups.size && window.__SaveMyAIConvert) {
       log("");
 
       // Preflight the model once (rather than failing repeatedly per chunk) when
-      // world info was requested. On failure we keep going without the model, so
-      // character cards and chats are still produced.
+      // extraction was requested. On failure we keep going without the model, so
+      // chat records are still produced and the card falls back to the basic
+      // persona from the Doubao API.
       let genOptions = settings;
-      if (settings.worldInfo && settings.settings && window.__SaveMyAIWorldInfo) {
+      if (settings.reconstruct && settings.settings && window.__SaveMyAIWorldInfo) {
         log("正在校验模型接口…");
         const check = await window.__SaveMyAIWorldInfo.verifyModel(settings.settings);
         if (check.ok) {
           log("模型接口正常（" + settings.settings.model + "）。");
         } else {
           log("⚠ 模型接口不可用：" + check.error);
-          log("  将跳过世界书与人设合成，仅生成角色卡与聊天记录。");
-          genOptions = { ...settings, worldInfo: false };
+          log("  将跳过智能提取，改用基础人设生成角色卡。");
+          genOptions = { ...settings, modelUnavailable: true };
         }
       }
 
@@ -845,48 +860,41 @@
       el("span", { textContent: "包含聊天里的图片（会慢一些）" }),
     ]);
 
-    const tavernToggle = Object.assign(document.createElement("input"), { type: "checkbox", checked: true });
-    const tavernLabel = el("label", { className: "smai-toggle" }, [
-      tavernToggle,
-      el("span", { textContent: "同时生成 SillyTavern 可导入文件（角色卡 + 聊天记录）" }),
+    // Tavern-format chat records (JSONL). Independent of the card.
+    const chatToggle = Object.assign(document.createElement("input"), { type: "checkbox", checked: true });
+    const chatLabel = el("label", { className: "smai-toggle" }, [
+      chatToggle,
+      el("span", { textContent: "生成酒馆格式聊天记录" }),
     ]);
 
-    const worldInfoToggle = Object.assign(document.createElement("input"), {
+    // Model-backed extraction: the character card and world book, both derived
+    // from the chat history in one shared pipeline. Opt-in, needs a model.
+    const extractToggle = Object.assign(document.createElement("input"), {
       type: "checkbox",
       checked: false,
       disabled: true,
     });
-    const worldInfoLabel = el("label", { className: "smai-toggle smai-toggle-disabled" }, [
-      worldInfoToggle,
-      el("span", { textContent: "生成核心记忆世界书（需在插件图标处配置模型）" }),
+    const extractLabel = el("label", { className: "smai-toggle smai-toggle-disabled" }, [
+      extractToggle,
+      el("span", { textContent: "基于聊天记录提取角色卡和世界书（需在插件图标处配置模型）" }),
     ]);
 
     const exportButton = el("button", { className: "smai-btn smai-btn-primary", textContent: "导出选中的对话" });
 
     const footer = el("div", { className: "smai-footer" }, [
       imageLabel,
-      tavernLabel,
-      worldInfoLabel,
+      chatLabel,
+      extractLabel,
       exportButton,
     ]);
 
-    // Enable the world-info toggle only when a model is configured.
     getSettings().then((config) => {
       if (config) {
-        worldInfoToggle.disabled = false;
-        worldInfoLabel.classList.remove("smai-toggle-disabled");
-        worldInfoLabel.lastChild.textContent = "生成核心记忆世界书（模型：" + config.model + "）";
+        extractToggle.disabled = false;
+        extractLabel.classList.remove("smai-toggle-disabled");
+        extractLabel.lastChild.textContent =
+          "基于聊天记录提取角色卡和世界书（模型：" + config.model + "）";
       }
-    });
-
-    // The world book is embedded in the character card, so it cannot be produced
-    // on its own. Keep the two toggles consistent: enabling world info forces the
-    // card on; disabling the card also disables world info.
-    worldInfoToggle.addEventListener("change", () => {
-      if (worldInfoToggle.checked) tavernToggle.checked = true;
-    });
-    tavernToggle.addEventListener("change", () => {
-      if (!tavernToggle.checked) worldInfoToggle.checked = false;
     });
 
     async function renderList() {
@@ -940,15 +948,15 @@
       logBox.innerHTML = "";
       log("正在读取智能体人设并解析对话…");
       try {
-        const settings = worldInfoToggle.checked ? await getSettings() : null;
+        const settings = extractToggle.checked ? await getSettings() : null;
         const resolved = await resolveItems(items.map((item) => ({ ...item })), log);
         if (!resolved.length) {
           log("没有可导出的对话（可能无法解析会话 ID）。");
         } else {
           await exportConversations(resolved, log, {
             includeImages: imageToggle.checked,
-            tavern: tavernToggle.checked,
-            worldInfo: worldInfoToggle.checked,
+            tavernChat: chatToggle.checked,
+            reconstruct: extractToggle.checked,
             settings,
           });
         }

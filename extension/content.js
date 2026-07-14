@@ -161,12 +161,15 @@
   async function fetchAll(conversationId, log) {
     let anchor = MAX_ANCHOR;
     let previousMin = Infinity;
-    let guard = 0;
     const seen = new Set();
     const rawMessages = [];
     const regen = {};
 
-    while (guard++ < 1000) {
+    // Keep paging backwards as long as the server reports more messages. There is
+    // no fixed cap: termination is guaranteed by the progress check below (each
+    // page must reach a strictly smaller index, bounded by 0), so a conversation
+    // of any length is exported in full.
+    while (true) {
       const downlink = await pullChain(conversationId, anchor, 50);
       const messages = downlink.messages || [];
       Object.assign(regen, downlink.regen_messages || {});

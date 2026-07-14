@@ -202,10 +202,13 @@
     return null;
   }
 
-  // Day-granularity date of a message (YYYY-MM-DD), or "" if unknown.
+  // Day-granularity date of a message (YYYY-MM-DD), or "" if unknown. Uses the
+  // archive's Beijing-time time_iso; the fallback also converts to UTC+8 so date
+  // markers stay in the timezone the user experienced.
   function dayOf(message) {
-    const iso = message.time_iso || (message.time ? new Date(message.time * 1000).toISOString() : "");
-    return iso ? iso.slice(0, 10) : "";
+    if (message.time_iso) return message.time_iso.slice(0, 10);
+    if (message.time) return new Date((Number(message.time) + 8 * 3600) * 1000).toISOString().slice(0, 10);
+    return "";
   }
 
   // Builds a plain-text transcript. Timestamps are preserved as compact

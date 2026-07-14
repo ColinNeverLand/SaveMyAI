@@ -194,6 +194,19 @@
     return { rawMessages, regen };
   }
 
+  // Formats a Unix timestamp (seconds) as an ISO 8601 string in Beijing time
+  // (UTC+8), e.g. "2024-03-15T22:00:00+08:00". The same instant as UTC, just
+  // displayed in the timezone Doubao users actually live in.
+  function beijingIso(unixSeconds) {
+    if (!unixSeconds) return null;
+    const d = new Date((Number(unixSeconds) + 8 * 3600) * 1000);
+    const pad = (n) => String(n).padStart(2, "0");
+    return (
+      `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}` +
+      `T${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}+08:00`
+    );
+  }
+
   // Builds the structured archive from raw messages, resolving the selected
   // regeneration branch and preserving the alternatives.
   function buildArchive(item, rawMessages, regen) {
@@ -230,7 +243,7 @@
         message_id: raw.message_id,
         role,
         time,
-        time_iso: time ? new Date(time * 1000).toISOString() : null,
+        time_iso: beijingIso(time),
         text,
       };
       if (raw.thinking_content) entry.thinking = raw.thinking_content;

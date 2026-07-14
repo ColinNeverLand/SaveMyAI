@@ -70,10 +70,20 @@
 
   // --- Chat log (JSONL) ------------------------------------------------------
 
+  // ISO 8601 in Beijing time (UTC+8), matching the archive's time_iso format.
+  function beijingIso(unixSeconds) {
+    const d = new Date((Number(unixSeconds) + 8 * 3600) * 1000);
+    const pad = (n) => String(n).padStart(2, "0");
+    return (
+      `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}` +
+      `T${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}+08:00`
+    );
+  }
+
   function messageTimestamp(message) {
     if (message.time_iso) return message.time_iso;
-    if (message.time) return new Date(message.time * 1000).toISOString();
-    return new Date().toISOString();
+    if (message.time) return beijingIso(message.time);
+    return beijingIso(Date.now() / 1000);
   }
 
   // Serialises an archive into a SillyTavern chat file. The first line is the

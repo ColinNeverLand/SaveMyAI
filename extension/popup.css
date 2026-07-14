@@ -82,6 +82,18 @@ body {
   color: var(--smai-muted);
 }
 
+.smai-pop-hint code {
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: rgba(118, 46, 32, 0.08);
+  font-size: 11px;
+}
+
+.smai-pop-opt {
+  color: var(--smai-muted);
+  font-weight: 400;
+}
+
 .smai-pop-field {
   display: block;
   margin-bottom: 12px;

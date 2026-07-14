@@ -25,17 +25,17 @@
       <section class="smai-pop-card">
         <h2>模型设置（可选）</h2>
         <p class="smai-pop-hint">
-          仅在需要生成「核心记忆世界书」时填写。填写任意 OpenAI 兼容接口即可，<b>国内中转站</b>把它给你的接口地址粘到下方即可使用。
+          仅在需要生成「核心记忆世界书」时填写。填写任意 OpenAI 兼容接口即可：<b>国内中转站</b>把它给你的接口地址粘到下方即可；也支持<b>本地模型</b>（Ollama、LM Studio 等），地址形如 <code>http://localhost:11434/v1</code>，通常无需 API Key。
         </p>
 
         <label class="smai-pop-field">
           <span>接口地址（Base URL）</span>
-          <input id="baseUrl" type="text" placeholder="https://your-relay.com/v1" autocomplete="off" />
+          <input id="baseUrl" type="text" placeholder="https://your-relay.com/v1 或 http://localhost:11434/v1" autocomplete="off" />
         </label>
 
         <label class="smai-pop-field">
-          <span>API Key</span>
-          <input id="apiKey" type="password" placeholder="sk-..." autocomplete="off" />
+          <span>API Key<span class="smai-pop-opt">（本地模型可不填）</span></span>
+          <input id="apiKey" type="password" placeholder="sk-...（本地模型留空）" autocomplete="off" />
         </label>
 
         <label class="smai-pop-field">

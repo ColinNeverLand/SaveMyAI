@@ -26,13 +26,15 @@ async function chatCompletion({ baseUrl, apiKey, model, messages, json }) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
+  // Local runtimes typically need no key, so only send Authorization when one
+  // is actually provided.
+  const headers = { "Content-Type": "application/json" };
+  if (apiKey) headers.Authorization = "Bearer " + apiKey;
+
   try {
     const response = await fetch(endpoint, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: "Bearer " + apiKey,
-      },
+      headers,
       body: JSON.stringify(requestBody),
       signal: controller.signal,
     });

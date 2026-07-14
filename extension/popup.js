@@ -44,8 +44,10 @@ function readConfig() {
   const baseUrl = els.baseUrl.value.trim();
   const apiKey = els.apiKey.value.trim();
   const model = els.model.value.trim();
-  if (!baseUrl || !apiKey || !model) {
-    setStatus("请填写接口地址、API Key 和模型名。", "error");
+  // The API Key is optional: local runtimes (Ollama, LM Studio, llama.cpp, …)
+  // usually expose an OpenAI-compatible endpoint that needs no key.
+  if (!baseUrl || !model) {
+    setStatus("请填写接口地址和模型名（本地模型可不填 API Key）。", "error");
     return null;
   }
   try {

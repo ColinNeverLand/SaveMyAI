@@ -4,7 +4,11 @@
   "version": "0.2.0",
   "description": "导出豆包智能体的人设与完整聊天记录，并一键转换为 SillyTavern 可导入的角色卡与聊天记录。所有数据仅保存在本地，不上传任何服务器。",
   "permissions": ["storage"],
-  "optional_host_permissions": ["https://*/*"],
+  "optional_host_permissions": [
+    "https://*/*",
+    "http://localhost/*",
+    "http://127.0.0.1/*"
+  ],
   "background": {
     "service_worker": "background.js"
   },

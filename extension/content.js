@@ -268,6 +268,13 @@
   }
 
   function buildMarkdown(archive) {
+    return buildMarkdownLines(archive).join("\n");
+  }
+
+  // Builds the human-readable chat view as an array of small line strings. The
+  // caller can either join it (for the exported API) or stream it into byte
+  // chunks, so an arbitrarily long history never forces one giant string.
+  function buildMarkdownLines(archive) {
     const lines = [];
     const conversation = archive.conversation;
     const persona = archive.persona;
@@ -320,7 +327,34 @@
         lines.push("");
       }
     }
-    return lines.join("\n");
+    return lines;
+  }
+
+  // Streams the markdown chat view into byte chunks, encoding lines in ~1MB
+  // batches. Like raw.json, this avoids ever holding one huge string, so
+  // chat.md is produced reliably regardless of conversation length.
+  function markdownChunks(archive) {
+    const lines = buildMarkdownLines(archive);
+    const encoder = new TextEncoder();
+    const chunks = [];
+    let batch = [];
+    let batchChars = 0;
+    const flush = () => {
+      if (!batch.length) return;
+      // A newline separator between batches keeps the join identical to a single
+      // lines.join("\n") over the whole document.
+      if (chunks.length) chunks.push(encoder.encode("\n"));
+      chunks.push(encoder.encode(batch.join("\n")));
+      batch = [];
+      batchChars = 0;
+    };
+    for (const line of lines) {
+      batch.push(line);
+      batchChars += line.length + 1;
+      if (batchChars >= 1_000_000) flush();
+    }
+    flush();
+    return chunks;
   }
 
   // --- Sidebar enumeration ---------------------------------------------------
@@ -426,11 +460,14 @@
     return table;
   })();
 
-  function crc32(bytes) {
-    let c = ~0;
+  // Incremental CRC-32 so a file can be checksummed across many byte chunks
+  // without ever holding all of its bytes in one buffer. Start from ~0, feed
+  // chunks with crc32Update, then finalise with crc32Finish.
+  function crc32Update(c, bytes) {
     for (let i = 0; i < bytes.length; i++) c = CRC_TABLE[(c ^ bytes[i]) & 0xff] ^ (c >>> 8);
-    return (~c) >>> 0;
+    return c;
   }
+  const crc32Finish = (c) => (~c) >>> 0;
 
   const uint16 = (n) => new Uint8Array([n & 255, (n >>> 8) & 255]);
   const uint32 = (n) => new Uint8Array([n & 255, (n >>> 8) & 255, (n >>> 16) & 255, (n >>> 24) & 255]);
@@ -447,6 +484,16 @@
     return result;
   }
 
+  // Normalises a file's data into an array of byte chunks. Accepts a string, a
+  // single Uint8Array, or an array of Uint8Array chunks (used for streamed,
+  // arbitrarily large files that can't fit in one JS string).
+  function toChunks(data, encoder) {
+    if (typeof data === "string") return [encoder.encode(data)];
+    if (data instanceof Uint8Array) return [data];
+    if (Array.isArray(data)) return data;
+    return [encoder.encode(String(data))];
+  }
+
   function zipStore(files) {
     const encoder = new TextEncoder();
     const parts = [];
@@ -455,8 +502,14 @@
 
     for (const file of files) {
       const nameBytes = encoder.encode(file.name);
-      const data = typeof file.data === "string" ? encoder.encode(file.data) : file.data;
-      const crc = crc32(data);
+      const chunks = toChunks(file.data, encoder);
+      let crc = ~0;
+      let dataLength = 0;
+      for (const chunk of chunks) {
+        crc = crc32Update(crc, chunk);
+        dataLength += chunk.length;
+      }
+      crc = crc32Finish(crc);
       const localHeader = concatBytes([
         uint32(0x04034b50),
         uint16(20),
@@ -465,12 +518,12 @@
         uint16(0),
         uint16(0),
         uint32(crc),
-        uint32(data.length),
-        uint32(data.length),
+        uint32(dataLength),
+        uint32(dataLength),
         uint16(nameBytes.length),
         uint16(0),
       ]);
-      parts.push(localHeader, nameBytes, data);
+      parts.push(localHeader, nameBytes, ...chunks);
       central.push(
         concatBytes([
           uint32(0x02014b50),
@@ -481,8 +534,8 @@
           uint16(0),
           uint16(0),
           uint32(crc),
-          uint32(data.length),
-          uint32(data.length),
+          uint32(dataLength),
+          uint32(dataLength),
           uint16(nameBytes.length),
           uint16(0),
           uint16(0),
@@ -493,7 +546,7 @@
         ]),
         nameBytes
       );
-      offset += localHeader.length + nameBytes.length + data.length;
+      offset += localHeader.length + nameBytes.length + dataLength;
     }
 
     let centralSize = 0;
@@ -552,7 +605,9 @@
     try {
       const stored = await chrome.storage.local.get(SETTINGS_KEY);
       const config = stored[SETTINGS_KEY];
-      if (config && config.baseUrl && config.apiKey && config.model) return config;
+      // The API key is optional (local runtimes need none); only base URL and
+      // model are required for the model-backed features.
+      if (config && config.baseUrl && config.model) return config;
     } catch {}
     return null;
   }
@@ -706,6 +761,54 @@
 
   // --- Export orchestration --------------------------------------------------
 
+  // Streams a top-level object into an array of small byte chunks, emitting any
+  // array or nested-object value element-by-element. This never materialises a
+  // single string, so it stays clear of the JS engine's ~512MB string limit no
+  // matter how long the conversation is. Elements (one message / one field) are
+  // assumed individually small. Output is compact (unindented) JSON.
+  function objectToChunks(obj) {
+    const encoder = new TextEncoder();
+    const chunks = [];
+    const put = (s) => chunks.push(encoder.encode(s));
+    const keys = Object.keys(obj);
+    put("{");
+    keys.forEach((key, ki) => {
+      put((ki ? "," : "") + JSON.stringify(key) + ":");
+      const value = obj[key];
+      if (Array.isArray(value)) {
+        put("[");
+        for (let i = 0; i < value.length; i++) put((i ? "," : "") + JSON.stringify(value[i]));
+        put("]");
+      } else if (value && typeof value === "object") {
+        const subKeys = Object.keys(value);
+        put("{");
+        subKeys.forEach((sk, si) => put((si ? "," : "") + JSON.stringify(sk) + ":" + JSON.stringify(value[sk])));
+        put("}");
+      } else {
+        put(JSON.stringify(value));
+      }
+    });
+    put("}");
+    return chunks;
+  }
+
+  // Serialises an object for a file, preferring human-readable pretty-printed
+  // output, then compact, and finally a streamed byte form for histories so
+  // large that even a compact string would exceed the engine's max string
+  // length. Returns either a string or an array of byte chunks (both accepted
+  // by zipStore).
+  function jsonForFile(obj) {
+    try {
+      return JSON.stringify(obj, null, 2);
+    } catch (prettyError) {
+      try {
+        return JSON.stringify(obj);
+      } catch (compactError) {
+        return objectToChunks(obj);
+      }
+    }
+  }
+
   async function exportConversations(items, log, options) {
     const settings = options || {};
     const files = [];
@@ -737,21 +840,22 @@
           groups.get(key).archives.push(archive);
         }
 
-        files.push({ name: folder + "/archive.json", data: JSON.stringify(archive, null, 2) });
-        files.push({ name: folder + "/chat.md", data: buildMarkdown(archive) });
+        // archive.json (falls back to a streamed byte form) and raw.json (always
+        // streamed message-by-message) can handle histories of any length
+        // without building one huge string, so they are written first.
+        files.push({ name: folder + "/archive.json", data: jsonForFile(archive) });
         files.push({
           name: folder + "/raw.json",
-          data: JSON.stringify(
-            {
-              conversation: { id: item.conversationId, name: item.name, bot_id: item.botId || null },
-              persona: item.persona || null,
-              messages: rawMessages,
-              regen_messages: regen,
-            },
-            null,
-            2
-          ),
+          data: objectToChunks({
+            conversation: { id: item.conversationId, name: item.name, bot_id: item.botId || null },
+            persona: item.persona || null,
+            messages: rawMessages,
+            regen_messages: regen,
+          }),
         });
+        // chat.md is streamed in line batches (see markdownChunks), so the
+        // human-readable view is produced reliably for histories of any length.
+        files.push({ name: folder + "/chat.md", data: markdownChunks(archive) });
         index.push({
           name: item.name,
           conversationId: item.conversationId,

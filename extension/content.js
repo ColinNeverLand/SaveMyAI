@@ -42,15 +42,17 @@
     return response.json();
   }
 
-  // Fetches one page of a conversation's message chain.
-  async function pullChain(conversationId, anchor, limit) {
+  // Fetches one page of a conversation's message chain. conversationType varies
+  // by conversation kind (agent chats use 3; the default assistant and some
+  // others differ), so it is a parameter rather than hard-coded.
+  async function pullChain(conversationId, anchor, limit, conversationType) {
     const json = await api("/im/chain/single", {
       cmd: 3100,
       uplink_body: {
         pull_singe_chain_uplink_body: {
           conversation_id: String(conversationId),
           anchor_index: anchor,
-          conversation_type: 3,
+          conversation_type: conversationType || 3,
           direction: 1,
           limit,
           ext: {},
@@ -156,21 +158,79 @@
 
   // --- Full conversation retrieval -------------------------------------------
 
+  // Wraps pullChain with a few exponential-backoff retries. A single transient
+  // failure (network blip, brief rate limit) would otherwise abort the whole
+  // conversation and, if it hits every conversation, leave an almost-empty zip.
+  async function pullChainWithRetry(conversationId, anchor, limit, conversationType, log) {
+    const maxAttempts = 4;
+    let lastError;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        return await pullChain(conversationId, anchor, limit, conversationType);
+      } catch (error) {
+        lastError = error;
+        if (attempt < maxAttempts) {
+          const wait = 500 * Math.pow(2, attempt - 1);
+          if (log) log("  拉取失败，" + wait / 1000 + "s 后重试（第 " + attempt + " 次）…");
+          await sleep(wait);
+        }
+      }
+    }
+    throw lastError;
+  }
+
+  // Candidate conversation_type values. Agent chats use 3; the default assistant
+  // ("豆包") and some conversations reject 3 with "系统内部异常", so we probe.
+  const CONVERSATION_TYPES = [3, 1, 2];
+
+  // Fetches the first page, auto-detecting the conversation_type by trying each
+  // candidate and keeping whichever returns messages (falling back to a valid
+  // but empty page for genuinely empty conversations). Returns the page and the
+  // type that worked, so the rest of the pagination can reuse it. Retries the
+  // whole probe a few times to ride out transient failures.
+  async function pullFirstPage(conversationId, limit, log) {
+    const maxRounds = 3;
+    let lastError;
+    for (let round = 1; round <= maxRounds; round++) {
+      let emptyButOk = null;
+      for (const type of CONVERSATION_TYPES) {
+        try {
+          const downlink = await pullChain(conversationId, MAX_ANCHOR, limit, type);
+          if (downlink.messages && downlink.messages.length) return { downlink, type };
+          if (!emptyButOk) emptyButOk = { downlink, type };
+        } catch (error) {
+          lastError = error;
+        }
+      }
+      if (emptyButOk) return emptyButOk;
+      if (round < maxRounds) {
+        const wait = 500 * Math.pow(2, round - 1);
+        if (log) log("  拉取失败，" + wait / 1000 + "s 后重试…");
+        await sleep(wait);
+      }
+    }
+    throw lastError || new Error("拉取消息失败");
+  }
+
   // Pages backwards from the newest message to the start of the conversation,
   // collecting messages and the regenerated-branch map along the way.
   async function fetchAll(conversationId, log) {
-    let anchor = MAX_ANCHOR;
     let previousMin = Infinity;
     const seen = new Set();
     const rawMessages = [];
     const regen = {};
+
+    // Probe the working conversation_type on the first page, then reuse it.
+    const first = await pullFirstPage(conversationId, 50, log);
+    const conversationType = first.type;
+    let downlink = first.downlink;
+    let anchor = MAX_ANCHOR;
 
     // Keep paging backwards as long as the server reports more messages. There is
     // no fixed cap: termination is guaranteed by the progress check below (each
     // page must reach a strictly smaller index, bounded by 0), so a conversation
     // of any length is exported in full.
     while (true) {
-      const downlink = await pullChain(conversationId, anchor, 50);
       const messages = downlink.messages || [];
       Object.assign(regen, downlink.regen_messages || {});
 
@@ -188,6 +248,7 @@
       if (minIndex >= previousMin) break;
       previousMin = minIndex;
       anchor = minIndex;
+      downlink = await pullChainWithRetry(conversationId, anchor, 50, conversationType, log);
     }
 
     rawMessages.sort((a, b) => Number(a.index_in_conv) - Number(b.index_in_conv));
@@ -361,16 +422,26 @@
 
   function enumerateSidebar() {
     const map = new Map();
+    // While a conversation is open, the page header renders an extra brand link
+    // labelled "豆包" that shares the open conversation's href and appears before
+    // its real sidebar entry. Prefer any real label over that generic brand text
+    // so the currently-open chat isn't mislabelled as "豆包".
+    const prefer = (key, entry) => {
+      const existing = map.get(key);
+      if (!existing) {
+        map.set(key, entry);
+      } else if (existing.name === "豆包" && entry.name && entry.name !== "豆包") {
+        map.set(key, entry);
+      }
+    };
     document.querySelectorAll('a[href^="/chat/"]').forEach((anchor) => {
       const href = anchor.getAttribute("href") || "";
       const name = (anchor.textContent || "").trim() || "未命名对话";
       let match;
       if ((match = href.match(/^\/chat\/bot\/chat\/(\d+)/))) {
-        const key = "b" + match[1];
-        if (!map.has(key)) map.set(key, { name, botId: match[1], href });
+        prefer("b" + match[1], { name, botId: match[1], href });
       } else if ((match = href.match(/^\/chat\/(\d+)/))) {
-        const key = "c" + match[1];
-        if (!map.has(key)) map.set(key, { name, conversationId: match[1], href });
+        prefer("c" + match[1], { name, conversationId: match[1], href });
       }
     });
     return [...map.values()];
@@ -440,7 +511,11 @@
         if (bot) {
           item.conversationId = bot.conversation_id;
           item.persona = buildPersona(bot);
-          if (!item.name && bot.name) item.name = bot.name;
+          // Prefer the agent's authoritative name from get_bot_list. The
+          // sidebar-scraped text is unreliable — while an agent chat is open it
+          // can render as the generic "豆包" — so it is only a fallback.
+          if (bot.name) item.name = bot.name;
+          else if (!item.name) item.name = "未命名智能体";
         }
       }
       item.type = 3;
@@ -897,6 +972,20 @@
           log("  ✘ 生成酒馆文件失败：" + (error && error.message ? error.message : error));
         }
       }
+    }
+
+    // Surface failures prominently so a mostly/entirely failed run is obvious
+    // rather than looking like a successful download of an almost-empty zip.
+    const failedEntries = index.filter((entry) => entry.error);
+    if (failedEntries.length) {
+      log("");
+      if (failedEntries.length === index.length) {
+        log("⚠ 所有对话都导出失败。常见原因：豆包未完全登录，或该对话服务端暂时不可读。");
+        log("  建议刷新豆包页面、确认已登录后重试；如仅个别对话失败，其余仍会正常导出。");
+      } else {
+        log("⚠ 有 " + failedEntries.length + "/" + index.length + " 条对话失败，其余已成功导出。");
+      }
+      failedEntries.forEach((entry) => log("  · " + entry.name + "：" + entry.error));
     }
 
     files.push({
